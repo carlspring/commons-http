@@ -23,11 +23,11 @@ public class TestClient implements Closeable
 
     private String protocol = "http";
 
-    private String host = System.getProperty("strongbox.host") != null ?
-                          System.getProperty("strongbox.host") : "localhost";
+    private String host = System.getProperty("http.commons.host") != null ?
+                          System.getProperty("http.commons.host") : "localhost";
 
-    private int port = System.getProperty("strongbox.port") != null ?
-                       Integer.parseInt(System.getProperty("strongbox.port")) :
+    private int port = System.getProperty("http.commons.port") != null ?
+                       Integer.parseInt(System.getProperty("http.commons.port")) :
                        48080;
 
     private String contextBaseUrl;
@@ -45,12 +45,12 @@ public class TestClient implements Closeable
 
     public static TestClient getTestInstance()
     {
-        String host = System.getProperty("strongbox.host") != null ?
-                      System.getProperty("strongbox.host") :
+        String host = System.getProperty("http.commons.host") != null ?
+                      System.getProperty("http.commons.host") :
                       "localhost";
 
-        int port = System.getProperty("strongbox.port") != null ?
-                   Integer.parseInt(System.getProperty("strongbox.port")) :
+        int port = System.getProperty("http.commons.port") != null ?
+                   Integer.parseInt(System.getProperty("http.commons.port")) :
                    48080;
 
         TestClient testClient = new TestClient();
