@@ -19,6 +19,8 @@ import java.util.Set;
 public class ByteRangeHeaderParser
 {
 
+    static final String BYTE_RANGE_NOT_VALID_MESSAGE = "The byte range provided is not valid.";
+
     private String headerContents;
 
     private Validator validator;
@@ -73,8 +75,10 @@ public class ByteRangeHeaderParser
 
                 byteRanges.add(byteRange);
             }
-            // TODO: The byteRange should never really be null.
-            // TODO: Might want to consider throwing an exception here.
+            else
+            {
+                throw new ByteRangeValidationException(BYTE_RANGE_NOT_VALID_MESSAGE);
+            }
         }
 
         return byteRanges;
@@ -84,19 +88,27 @@ public class ByteRangeHeaderParser
     {
         ByteRange byteRange = null;
 
-        if (!range.contains("-"))
+        final String firstNBytesRegex = "^\\d+-?$";
+        final String betweenNBytesRegex = "^(\\d+-\\d+)$";
+        final String lastNBytesRegex = "^-\\d+$";
+
+        if (range.matches(firstNBytesRegex))
         {
-            // Example: 2000 ; Read after the first 2000 bytes.
-            Long start = Long.parseLong(range);
+            Long start;
+            if (range.endsWith("-"))
+            {
+                // Example: 1000- ; Read all bytes after 1000.
+                start = Long.parseLong(range.substring(0, range.length() - 1));
+            }
+            else
+            {
+                // Example: 2000 ; Read all bytes after 2000.
+                start = Long.parseLong(range);
+            }
+
             byteRange = new ByteRange(start);
         }
-        else if (range.endsWith("-"))
-        {
-            // Example: 1000- ; Read all bytes after 1000
-            Long start = Long.parseLong(range.substring(0, range.length() - 1));
-            byteRange = new ByteRange(start);
-        }
-        else if (range.contains("-") && !range.startsWith("-") && !range.endsWith("-"))
+        else if (range.matches(betweenNBytesRegex))
         {
             // Example: 1000-2000 ; Read bytes 1000-2000 (incl.)
             String[] rangeElements = range.split("-");
@@ -104,7 +116,7 @@ public class ByteRangeHeaderParser
             Long end = Long.parseLong(rangeElements[1]);
             byteRange = new ByteRange(start, end);
         }
-        else if (range.startsWith("-") && range.lastIndexOf('-') == 0)
+        else if (range.matches(lastNBytesRegex))
         {
             // Example: -2000 ; Read the last 2000 bytes.
             Long start = 0L;
@@ -121,7 +133,10 @@ public class ByteRangeHeaderParser
         Optional<String> errorMessageOptional = violations.stream().findFirst().map(ConstraintViolation::getMessage);
         if (errorMessageOptional.isPresent())
         {
-            throw new ByteRangeValidationException(byteRange.toString() + ": " + errorMessageOptional.get());
+            String byteRangeStr =
+                    byteRange.getTotalLength() != 0 ? byteRange.toString() + "/" + byteRange.getTotalLength() :
+                    byteRange.toString();
+            throw new ByteRangeValidationException(byteRangeStr + ": " + errorMessageOptional.get());
         }
     }
 

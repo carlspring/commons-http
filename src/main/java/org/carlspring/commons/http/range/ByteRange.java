@@ -76,7 +76,7 @@ public class ByteRange
         {
             if (totalLength == 0)
             {
-                return prefix + "foo";
+                return prefix + limit;
             }
             else
             {
@@ -89,7 +89,7 @@ public class ByteRange
         }
         else
         {
-            String limitStr = limit != null && limit > 0 ? "-" + limit : "";
+            String limitStr = limit != null && limit >= 0 ? "-" + limit : "";
             String totalLengthStr = totalLength > 0 ? "/" + totalLength : "";
             return prefix + offset + limitStr + totalLengthStr;
         }

@@ -1,122 +1,329 @@
 package org.carlspring.commons.http.range;
 
+import org.carlspring.commons.http.range.validation.ByteRangeValidationException;
+
 import java.util.List;
 
-import org.junit.Test;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import static org.carlspring.commons.http.range.ByteRangeHeaderParser.BYTE_RANGE_NOT_VALID_MESSAGE;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * @author mtodorov
+ * @author Pablo Tirado
  */
 public class ByteRangeHeaderParserTest
 {
 
-
-    @Test
-    public void testParsingWithOffsetOnly()
+    @Nested
+    @DisplayName("Tests for single byte ranges")
+    class SingleByteRangeHeaderParserTest
     {
-        String headerContents = "bytes=500-";
 
-        ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
-        List<ByteRange> ranges = parser.getRanges();
+        @Test
+        void testParsingWithNegativeOffsetShouldThrowByteRangeValidationException()
+        {
+            // Given
+            String headerContents = "bytes=-5-50";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
 
-        assertFalse(ranges.isEmpty());
-        assertEquals("Parsed incorrect number of ranges!", 1, ranges.size());
+            // When
+            ByteRangeValidationException exception = assertThrows(ByteRangeValidationException.class,
+                                                                  parser::getRanges);
 
-        ByteRange range = ranges.get(0);
+            // Then
+            assertEquals(BYTE_RANGE_NOT_VALID_MESSAGE, exception.getMessage());
+        }
 
-        assertEquals("Parsed an incorrect offset value!", 500, range.getOffset().longValue());
-        assertNull("Parsed an incorrect end value!", range.getLimit());
+        @Test
+        void testParsingWithNegativeLengthShouldThrowByteRangeValidationException()
+        {
+            // Given
+            String headerContents = "bytes=5-50/-1000";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
 
-        assertEquals("bytes=500-", range.toString());
+            // When
+            ByteRangeValidationException exception = assertThrows(ByteRangeValidationException.class,
+                                                                  parser::getRanges);
+
+            // Then
+            assertThat(exception.getMessage(), containsString("Range length must be greater than or equal to zero"));
+        }
+
+        @Test
+        void testParsingWithOffsetGreaterThaLimitShouldThrowByteRangeValidationException()
+        {
+            // Given
+            String headerContents = "bytes=50-5";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
+
+            // When
+            ByteRangeValidationException exception = assertThrows(ByteRangeValidationException.class,
+                                                                  parser::getRanges);
+
+            // Then
+            assertThat(exception.getMessage(), containsString("Range limit must be greater than or equal to offset"));
+        }
+
+        @Test
+        void testParsingWithOffsetOnly()
+        {
+            // Given
+            String headerContents = "bytes=500-";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
+
+            // When
+            List<ByteRange> ranges = parser.getRanges();
+
+            // Then
+            assertFalse(ranges.isEmpty());
+            assertEquals(1, ranges.size(), "Parsed incorrect number of ranges!");
+
+            ByteRange range = ranges.get(0);
+
+            assertEquals(500, range.getOffset().longValue(), "Parsed an incorrect offset value!");
+            assertNull(range.getLimit(), "Parsed an incorrect end value!");
+
+            assertEquals("bytes=500-", range.toString());
+        }
+
+        @Test
+        void testParsingWithEndOnly()
+        {
+            // Given
+            String headerContents = "bytes=-500";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
+
+            // When
+            List<ByteRange> ranges = parser.getRanges();
+
+            // Then
+            assertFalse(ranges.isEmpty());
+            assertEquals(1, ranges.size(), "Parsed incorrect number of ranges!");
+
+            long totalLength = 1001L;
+            ByteRange range = ranges.get(0);
+            range.setTotalLength(totalLength);
+
+            assertEquals(0, range.getOffset().longValue(), "Parsed an incorrect offset value!");
+            assertEquals(-500, range.getLimit().longValue(), "Parsed an incorrect end value!");
+
+            assertEquals("bytes=500-1000/1001", range.toString());
+        }
+
+        @Test
+        void testParsingWithOffsetAndEnd()
+        {
+            // Given
+            String headerContents = "bytes=500-1000";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
+
+            // When
+            List<ByteRange> ranges = parser.getRanges();
+
+            // Then
+            assertFalse(ranges.isEmpty());
+            assertEquals(1, ranges.size(), "Parsed incorrect number of ranges!");
+
+            long totalLength = 1001L;
+            ByteRange range = ranges.get(0);
+            range.setTotalLength(totalLength);
+
+            assertEquals(500, range.getOffset().longValue(), "Parsed an incorrect offset value!");
+            assertEquals(1000, range.getLimit().longValue(), "Parsed an incorrect end value!");
+
+            assertEquals("bytes=500-1000/1001", range.toString());
+        }
+
+        @Test
+        void testToStringWithWildcardLength1()
+        {
+            // Given
+            String headerContents = "bytes=500-1000/*";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
+
+            // When
+            List<ByteRange> ranges = parser.getRanges();
+
+            // Then
+            ByteRange range = ranges.get(0);
+
+            assertEquals(500, range.getOffset().longValue(), "Failed to parse offset!");
+            assertEquals(1000, range.getLimit().longValue(), "Failed to parse end!");
+            assertEquals(0, range.getTotalLength().longValue(), "Failed to parse length!");
+        }
+
+        @Test
+        void testToStringWithWildcardLength2()
+        {
+            // Given
+            String headerContents = "bytes=500/*";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
+
+            // When
+            List<ByteRange> ranges = parser.getRanges();
+
+            // Then
+            ByteRange range = ranges.get(0);
+
+            assertEquals(500, range.getOffset().longValue(), "Failed to parse offset!");
+            assertEquals(0, range.getTotalLength().longValue(), "Failed to parse length!");
+        }
+
+        @Test
+        void testToStringWithWildcardLength3()
+        {
+            // Given
+            String headerContents = "bytes=-500/*";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
+
+            // When
+            List<ByteRange> ranges = parser.getRanges();
+
+            // Then
+            ByteRange range = ranges.get(0);
+
+            assertEquals(0, range.getOffset().longValue(), "Failed to parse offset!");
+            assertEquals(-500, range.getLimit().longValue(), "Failed to parse limit!");
+            assertEquals(0, range.getTotalLength().longValue(), "Failed to parse length!");
+        }
+
+        @Test
+        void testToStringWithFixedLength()
+        {
+            // Given
+            String headerContents = "bytes=100-500/1024";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
+
+            // When
+            List<ByteRange> ranges = parser.getRanges();
+
+            // Then
+            ByteRange range = ranges.get(0);
+
+            assertEquals(100, range.getOffset().longValue(), "Failed to parse offset!");
+            assertEquals(500, range.getLimit().longValue(), "Failed to parse limit!");
+            assertEquals(1024, range.getTotalLength().longValue(), "Failed to parse length!");
+        }
     }
 
-    @Test
-    public void testParsingWithEndOnly()
+    @Nested
+    @DisplayName("Tests for multiple byte ranges")
+    class MultipleByteRangeHeaderParserTest
     {
-        String headerContents = "bytes=-500";
 
-        ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
-        List<ByteRange> ranges = parser.getRanges();
+        @Test
+        void testParsingWithNegativeOffsetShouldThrowByteRangeValidationException()
+        {
+            // Given
+            String headerContents = "bytes=5-50,-60-80";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
 
-        assertFalse(ranges.isEmpty());
-        assertEquals("Parsed incorrect number of ranges!", 1, ranges.size());
+            // When
+            ByteRangeValidationException exception = assertThrows(ByteRangeValidationException.class,
+                                                                  parser::getRanges);
 
-        long totalLength = 1001L;
-        ByteRange range = ranges.get(0);
-        range.setTotalLength(totalLength);
+            // Then
+            assertEquals(BYTE_RANGE_NOT_VALID_MESSAGE, exception.getMessage());
+        }
 
-        assertEquals("Parsed an incorrect offset value!", 0, range.getOffset().longValue());
-        assertEquals("Parsed an incorrect end value!", -500, range.getLimit().longValue());
+        @Test
+        void testParsingWithNegativeLengthShouldThrowByteRangeValidationException()
+        {
+            // Given
+            String headerContents = "bytes=5-50,60-80/-1000";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
 
-        assertEquals("bytes=500-1000/1001", range.toString());
+            // When
+            ByteRangeValidationException exception = assertThrows(ByteRangeValidationException.class,
+                                                                  parser::getRanges);
+
+            // Then
+            assertThat(exception.getMessage(), containsString("Range length must be greater than or equal to zero"));
+        }
+
+        @Test
+        void testParsingWithOffsetGreaterThaLimitShouldThrowByteRangeValidationException()
+        {
+            // Given
+            String headerContents = "bytes=5-60,200-100";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
+
+            // When
+            ByteRangeValidationException exception = assertThrows(ByteRangeValidationException.class,
+                                                                  parser::getRanges);
+
+            // Then
+            assertThat(exception.getMessage(), containsString("Range limit must be greater than or equal to offset"));
+        }
+
+        @Test
+        void testParsingWithOffsetAndEnd()
+        {
+            // Given
+            String headerContents = "bytes=100-200,500-1000";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
+
+            // When
+            List<ByteRange> ranges = parser.getRanges();
+
+            // Then
+            assertFalse(ranges.isEmpty());
+            assertEquals(2, ranges.size(), "Parsed incorrect number of ranges!");
+
+            long totalLength = 1001L;
+            ByteRange range = ranges.get(0);
+            range.setTotalLength(totalLength);
+
+            assertEquals(100, range.getOffset().longValue(), "Parsed an incorrect offset value!");
+            assertEquals(200, range.getLimit().longValue(), "Parsed an incorrect end value!");
+
+            assertEquals("bytes=100-200/1001", range.toString());
+
+            range = ranges.get(1);
+            range.setTotalLength(totalLength);
+
+            assertEquals(500, range.getOffset().longValue(), "Parsed an incorrect offset value!");
+            assertEquals(1000, range.getLimit().longValue(), "Parsed an incorrect end value!");
+
+            assertEquals("bytes=500-1000/1001", range.toString());
+        }
+
+        @Test
+        void testParsingWithFirstByteOffsetAndLastByteEnd()
+        {
+            // Given
+            String headerContents = "bytes=0-0,-1";
+            ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
+
+            // When
+            List<ByteRange> ranges = parser.getRanges();
+
+            // Then
+            assertFalse(ranges.isEmpty());
+            assertEquals(2, ranges.size(), "Parsed incorrect number of ranges!");
+
+            ByteRange range = ranges.get(0);
+
+            assertEquals(0, range.getOffset().longValue(), "Parsed an incorrect offset value!");
+            assertEquals(0, range.getLimit().longValue(), "Parsed an incorrect end value!");
+
+            assertEquals("bytes=0-0", range.toString());
+
+            range = ranges.get(1);
+
+            assertEquals(0, range.getOffset().longValue(), "Parsed an incorrect offset value!");
+            assertEquals(-1, range.getLimit().longValue(), "Parsed an incorrect end value!");
+
+            assertEquals("bytes=-1", range.toString());
+        }
+
     }
-
-    @Test
-    public void testParsingWithOffsetAndEnd()
-    {
-        String headerContents = "bytes=500-1000";
-
-        ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
-        List<ByteRange> ranges = parser.getRanges();
-
-        assertFalse(ranges.isEmpty());
-        assertEquals("Parsed incorrect number of ranges!", 1, ranges.size());
-
-        long totalLength = 1001L;
-        ByteRange range = ranges.get(0);
-        range.setTotalLength(totalLength);
-
-        assertEquals("Parsed an incorrect offset value!", 500, range.getOffset().longValue());
-        assertEquals("Parsed an incorrect end value!", 1000, range.getLimit().longValue());
-
-        assertEquals("bytes=500-1000/1001", range.toString());
-    }
-
-    @Test
-    public void testToStringWithWildcardLength1()
-    {
-        String headerContents = "bytes=500-1000/*";
-
-        ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
-        List<ByteRange> ranges = parser.getRanges();
-
-        ByteRange range = ranges.get(0);
-
-        assertEquals("Failed to parse offset!", 500, range.getOffset().longValue());
-        assertEquals("Failed to parse end!", 1000, range.getLimit().longValue());
-        assertEquals("Failed to parse length!", 0, range.getTotalLength().longValue());
-    }
-
-    @Test
-    public void testToStringWithWildcardLength2()
-    {
-        String headerContents = "bytes=500/*";
-
-        ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
-        List<ByteRange> ranges = parser.getRanges();
-
-        ByteRange range = ranges.get(0);
-
-        assertEquals("Failed to parse offset!", 500, range.getOffset().longValue());
-        assertEquals("Failed to parse length!", 0, range.getTotalLength().longValue());
-    }
-
-    @Test
-    public void testToStringWithWildcardLength3()
-    {
-        String headerContents = "bytes=-500/*";
-
-        ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
-        List<ByteRange> ranges = parser.getRanges();
-
-        ByteRange range = ranges.get(0);
-
-        assertEquals("Failed to parse offset!", 0, range.getOffset().longValue());
-        assertEquals("Failed to parse limit!", -500, range.getLimit().longValue());
-        assertEquals("Failed to parse length!", 0, range.getTotalLength().longValue());
-    }
-
 }
