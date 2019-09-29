@@ -1,59 +1,68 @@
 package org.carlspring.commons.http.range;
 
+import org.carlspring.commons.http.range.validation.ByteRangeCheck;
+
+import javax.validation.constraints.Min;
+
 /**
  * @author mtodorov
+ * @author Pablo Tirado
  */
+@ByteRangeCheck(message = "Range limit must be greater than or equal to offset")
 public class ByteRange
 {
 
-    private long offset = 0L;
+    @Min(value = 0, message = "Range offset must be greater than or equal to zero")
+    private Long offset;
 
-    private long limit = 0L;
+    private Long limit;
 
-    private long totalLength = 0L;
+    @Min(value = 0, message = "Range length must be greater than or equal to zero")
+    private Long totalLength;
 
 
     public ByteRange()
     {
     }
 
-    public ByteRange(long offset)
+    public ByteRange(Long offset)
     {
         this.offset = offset;
     }
 
-    public ByteRange(long offset, long limit)
+    public ByteRange(Long offset,
+                     Long limit)
     {
         this.offset = offset;
         this.limit = limit;
     }
 
-    public long getOffset()
+    public Long getOffset()
     {
         return offset;
     }
 
-    public void setOffset(long offset)
+    public void setOffset(Long offset)
     {
         this.offset = offset;
     }
 
-    public long getLimit()
+    public Long getLimit()
     {
         return limit;
     }
 
-    public void setLimit(long limit)
+    public void setLimit(Long limit)
     {
         this.limit = limit;
     }
 
-    public long getTotalLength()
+    public Long getTotalLength()
     {
         return totalLength;
     }
 
-    public void setTotalLength(long totalLength)
+    public void setTotalLength(Long totalLength)
     {
         this.totalLength = totalLength;
     }
@@ -63,24 +72,26 @@ public class ByteRange
     {
         final String prefix = "bytes=";
 
-        if (offset == 0 && limit < 0)
+        if (offset == 0 && limit != null && limit < 0)
         {
             if (totalLength == 0)
             {
-                return prefix + (limit > 0 ? limit + "-" : "foo");
+                return prefix + limit;
             }
             else
             {
                 return prefix + (totalLength + limit - 1) + "-" + (totalLength - 1) + "/" + totalLength;
             }
         }
-        else if (offset > 0 && limit == 0)
+        else if (offset > 0 && limit == null)
         {
             return prefix + (totalLength > 0 ? "-" + totalLength : offset + "-");
         }
         else
         {
-            return prefix + offset + (limit > 0 ? "-" + limit : "") + (totalLength > 0 ? "/" + totalLength : "");
+            String limitStr = limit != null && limit >= 0 ? "-" + limit : "";
+            String totalLengthStr = totalLength > 0 ? "/" + totalLength : "";
+            return prefix + offset + limitStr + totalLengthStr;
         }
     }
 }

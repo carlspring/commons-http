@@ -1,20 +1,42 @@
 package org.carlspring.commons.http.range;
 
+import org.carlspring.commons.http.range.validation.ByteRangeValidationException;
+
+import javax.validation.ConstraintViolation;
+import javax.validation.Validation;
+import javax.validation.Validator;
+import javax.validation.ValidatorFactory;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * @author mtodorov
+ * @author Pablo Tirado
  */
 public class ByteRangeHeaderParser
 {
 
+    static final String BYTE_RANGE_NOT_VALID_MESSAGE = "The byte range provided is not valid.";
+
     private String headerContents;
+
+    private Validator validator;
 
 
     public ByteRangeHeaderParser(String headerContents)
     {
         this.headerContents = headerContents;
+
+        initValidationFactory();
+    }
+
+    private void initValidationFactory()
+    {
+        ValidatorFactory validatorFactory = Validation.buildDefaultValidatorFactory();
+        validator = validatorFactory.getValidator();
     }
 
     /**
@@ -26,59 +48,96 @@ public class ByteRangeHeaderParser
     {
         List<ByteRange> byteRanges = new ArrayList<>();
 
-        String[] ranges = headerContents.substring(headerContents.lastIndexOf('=') + 1,
-                                                   headerContents.length()).split(",");
+        String byteRangesHeader = headerContents.substring(headerContents.lastIndexOf('=') + 1);
 
-        for (String range : ranges)
+        long length = byteRangesHeader.contains("/") && !byteRangesHeader.endsWith("/*") ?
+                      Long.parseLong(byteRangesHeader.substring(byteRangesHeader.lastIndexOf('/') + 1)) : 0;
+
+        String[] ranges = byteRangesHeader.split(",");
+        String[] rangesWithoutLength = Arrays.stream(ranges)
+                                             .map(range -> range.contains("/") ?
+                                                           range.substring(0, range.indexOf('/')) :
+                                                           range)
+                                             .toArray(String[]::new);
+
+        for (String range : rangesWithoutLength)
         {
-            long length = range.contains("/") && !range.endsWith("/*") ?
-                          Long.parseLong(range.substring(range.lastIndexOf("/") + 1, range.length())) :  0;
-
-            ByteRange byteRange = null;
-
-            range = range.contains("/") ? range.substring(0, range.indexOf("/")) : range;
-
-            if (range.endsWith("-"))
-            {
-                // Example: 1000- ; Read all bytes after 1000
-                byteRange = new ByteRange(Long.parseLong(range.substring(0, range.length() - 1)));
-            }
-            else if (range.contains("-") && !range.startsWith("-") && !range.endsWith("-"))
-            {
-                // Example: 1000-2000 ; Read bytes 1000-2000 (incl.)
-                String[] rangeElements = range.split("-");
-
-                byteRange = new ByteRange(Long.parseLong(rangeElements[0]), Long.parseLong(rangeElements[1]));
-            }
-            else if (range.startsWith("-") && range.lastIndexOf("-") == 0)
-            {
-                // Example: -2000 ; Read the last 2000 bytes.
-                byteRange = new ByteRange(0, Long.parseLong(range));
-            }
-            else if (range.endsWith("-") && range.split("-").length == 1)
-            {
-                // Example: 2000- ; Read after the first 2000 bytes.
-                byteRange = new ByteRange(Long.parseLong(range.substring(0, range.length() - 1)));
-            }
-            else if (!range.contains("-") || (range.startsWith("-") && range.split("-").length == 1))
-            {
-                long l = Long.parseLong(range);
-
-                // Example: 2000 ; Read after the first 2000 bytes.
-                byteRange = l > 0 ? new ByteRange(l) : new ByteRange(0, l);
-            }
-
+            ByteRange byteRange = createByteRangeFromPosition(range);
             if (byteRange != null)
             {
                 byteRange.setTotalLength(length);
 
+                Set<ConstraintViolation<ByteRange>> violations = validator.validate(byteRange);
+                if (!violations.isEmpty())
+                {
+                    handleByteRangeConstraintViolations(violations, byteRange);
+                }
+
                 byteRanges.add(byteRange);
             }
-            // TODO: The byteRange should never really be null.
-            // TODO: Might want to consider throwing an exception here.
+            else
+            {
+                throw new ByteRangeValidationException(BYTE_RANGE_NOT_VALID_MESSAGE);
+            }
         }
 
         return byteRanges;
+    }
+
+    private ByteRange createByteRangeFromPosition(String range)
+    {
+        ByteRange byteRange = null;
+
+        final String firstNBytesRegex = "^\\d+-?$";
+        final String betweenNBytesRegex = "^(\\d+-\\d+)$";
+        final String lastNBytesRegex = "^-\\d+$";
+
+        if (range.matches(firstNBytesRegex))
+        {
+            Long start;
+            if (range.endsWith("-"))
+            {
+                // Example: 1000- ; Read all bytes after 1000.
+                start = Long.parseLong(range.substring(0, range.length() - 1));
+            }
+            else
+            {
+                // Example: 2000 ; Read all bytes after 2000.
+                start = Long.parseLong(range);
+            }
+
+            byteRange = new ByteRange(start);
+        }
+        else if (range.matches(betweenNBytesRegex))
+        {
+            // Example: 1000-2000 ; Read bytes 1000-2000 (incl.)
+            String[] rangeElements = range.split("-");
+            Long start = Long.parseLong(rangeElements[0]);
+            Long end = Long.parseLong(rangeElements[1]);
+            byteRange = new ByteRange(start, end);
+        }
+        else if (range.matches(lastNBytesRegex))
+        {
+            // Example: -2000 ; Read the last 2000 bytes.
+            Long start = 0L;
+            Long end = Long.parseLong(range);
+            byteRange = new ByteRange(start, end);
+        }
+
+        return byteRange;
+    }
+
+    private void handleByteRangeConstraintViolations(Set<ConstraintViolation<ByteRange>> violations,
+                                                     ByteRange byteRange)
+    {
+        Optional<String> errorMessageOptional = violations.stream().findFirst().map(ConstraintViolation::getMessage);
+        if (errorMessageOptional.isPresent())
+        {
+            String byteRangeStr =
+                    byteRange.getTotalLength() != 0 ? byteRange.toString() + "/" + byteRange.getTotalLength() :
+                    byteRange.toString();
+            throw new ByteRangeValidationException(byteRangeStr + ": " + errorMessageOptional.get());
+        }
     }
 
 }
