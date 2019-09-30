@@ -62,11 +62,11 @@ public class ByteRangeCheckValidatorTest
     }
 
     @Test
-    void byteRangeOffSetGreaterThanLimitIsValid()
+    void byteRangeLimitGreaterThanOffsetIsValid()
     {
         // Given
         // Example: 1000-2000 ; Read bytes 1000-2000 (incl.)
-        ByteRange byteRange = new ByteRange(1000L, -2000L);
+        ByteRange byteRange = new ByteRange(1000L, 2000L);
 
         // When
         Set<ConstraintViolation<ByteRange>> violations = validator.validate(byteRange);
@@ -79,7 +79,7 @@ public class ByteRangeCheckValidatorTest
     void byteRangeOffsetGreaterThanLimitIsNotValid()
     {
         // Given
-        ByteRange byteRange = new ByteRange(500L, 100L);
+        ByteRange byteRange = new ByteRange(50L, 0L);
 
         // When
         Set<ConstraintViolation<ByteRange>> violations = validator.validate(byteRange);
