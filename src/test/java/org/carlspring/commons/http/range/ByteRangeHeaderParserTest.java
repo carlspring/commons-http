@@ -61,7 +61,7 @@ public class ByteRangeHeaderParserTest
         void testParsingWithOffsetGreaterThaLimitShouldThrowByteRangeValidationException()
         {
             // Given
-            String headerContents = "bytes=50-5";
+            String headerContents = "bytes=50-0";
             ByteRangeHeaderParser parser = new ByteRangeHeaderParser(headerContents);
 
             // When
@@ -157,7 +157,7 @@ public class ByteRangeHeaderParserTest
 
             assertEquals(500, range.getOffset().longValue(), "Failed to parse offset!");
             assertEquals(1000, range.getLimit().longValue(), "Failed to parse end!");
-            assertEquals(0, range.getTotalLength().longValue(), "Failed to parse length!");
+            assertEquals(0, range.getTotalLength(), "Failed to parse length!");
         }
 
         @Test
@@ -174,7 +174,7 @@ public class ByteRangeHeaderParserTest
             ByteRange range = ranges.get(0);
 
             assertEquals(500, range.getOffset().longValue(), "Failed to parse offset!");
-            assertEquals(0, range.getTotalLength().longValue(), "Failed to parse length!");
+            assertEquals(0, range.getTotalLength(), "Failed to parse length!");
         }
 
         @Test
@@ -192,7 +192,7 @@ public class ByteRangeHeaderParserTest
 
             assertEquals(0, range.getOffset().longValue(), "Failed to parse offset!");
             assertEquals(-500, range.getLimit().longValue(), "Failed to parse limit!");
-            assertEquals(0, range.getTotalLength().longValue(), "Failed to parse length!");
+            assertEquals(0, range.getTotalLength(), "Failed to parse length!");
         }
 
         @Test
@@ -210,7 +210,7 @@ public class ByteRangeHeaderParserTest
 
             assertEquals(100, range.getOffset().longValue(), "Failed to parse offset!");
             assertEquals(500, range.getLimit().longValue(), "Failed to parse limit!");
-            assertEquals(1024, range.getTotalLength().longValue(), "Failed to parse length!");
+            assertEquals(1024, range.getTotalLength(), "Failed to parse length!");
         }
     }
 

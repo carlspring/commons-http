@@ -18,8 +18,7 @@ public class ByteRange
     private Long limit;
 
     @Min(value = 0, message = "Range length must be greater than or equal to zero")
-    private Long totalLength;
-
+    private long totalLength = 0L;
 
     public ByteRange()
     {
@@ -57,12 +56,12 @@ public class ByteRange
         this.limit = limit;
     }
 
-    public Long getTotalLength()
+    public long getTotalLength()
     {
         return totalLength;
     }
 
-    public void setTotalLength(Long totalLength)
+    public void setTotalLength(long totalLength)
     {
         this.totalLength = totalLength;
     }

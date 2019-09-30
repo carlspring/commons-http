@@ -25,16 +25,19 @@ public class ByteRangeCheckValidator
         Long start = byteRange.getOffset();
         Long end = byteRange.getLimit();
 
+        // Valid for cases like bytes=500-, where offset is 500 and limit is internally null.
         if (end == null)
         {
             return true;
         }
 
-        if (end <= 0)
+        // Valid for cases like bytes=-500, where offset is internally zero, and limit is -500.
+        if (end < 0)
         {
-            return start >= end;
+            return start == 0;
         }
 
+        // Rest of cases, like bytes=0-0,100-200, etc.
         return end >= start;
 
     }
